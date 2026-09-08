@@ -31,10 +31,14 @@
   h1{font-weight:900;letter-spacing:-.02em;margin:0}
   p{margin:0}
 
-  #app{min-height:100%;display:flex;flex-direction:column;position:relative;overflow:hidden}
+  /* Yukseklik ekrana civili. svh = tarayici cubuklari aciktaki yukseklik.
+     JS ayrica klavye acilinca visualViewport'a gore daraltir. */
+  #app{position:fixed;top:0;left:0;right:0;
+    height:100vh;height:100svh;
+    display:flex;flex-direction:column;overflow:hidden}
   #grain{position:absolute;inset:0;pointer-events:none;opacity:.05;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")}
-  .screen{display:none;flex:1;flex-direction:column;padding:calc(18px + env(safe-area-inset-top,0px)) 20px calc(24px + var(--pad))}
+  .screen{display:none;flex:1;min-height:0;flex-direction:column;padding:calc(18px + env(safe-area-inset-top,0px)) 20px calc(24px + var(--pad))}
   .screen.on{display:flex}
 
   .mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;min-height:260px}
@@ -93,8 +97,8 @@
     --bone:#F5E6E8;--rose:#C79AA6;--amber:#EE8FA0;--amber-dim:#74404A;--teal:#8FB6C7}
 
   /* akis */
-  #stream{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 0 12px;
-    display:flex;flex-direction:column}
+  #stream{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:10px 0 12px;display:flex;flex-direction:column}
   #akis{margin-top:auto;display:flex;flex-direction:column;gap:9px}
   .bubble{max-width:78%;padding:10px 14px;border-radius:18px;font-size:15px;
     line-height:1.45;color:var(--ink);word-break:break-word}
@@ -112,7 +116,8 @@
   .muhur span{font-weight:700;font-size:13.5px;color:var(--ink);margin-top:8px}
 
   /* alt cubuk */
-  .composer{display:flex;gap:9px;align-items:center;padding:10px 0 calc(10px + var(--pad));
+  .composer{display:flex;gap:9px;align-items:center;flex:0 0 auto;
+    padding:10px 0 calc(10px + var(--pad));
     border-top:1px solid rgba(243,227,211,.09)}
   .composer input{flex:1;min-width:0;background:var(--deep);border:1px solid var(--amber-dim);
     border-radius:22px;padding:13px 16px;font-size:16px;color:var(--bone)}
@@ -535,6 +540,9 @@ async function unlock() {
     KEY = await deriveKey(pass);
     ROOM = (await sha(pass + "|kelebek/oda/v1")).slice(0, 40);
     NAME = name;
+    // Kimlik cihaza degil, parola+isme bagli: yeniden kurunca degismiyor
+    ME = (await sha(pass + "|" + name + "|kelebek/cihaz/v1")).slice(0, 32);
+    localStorage.setItem("kb.me", ME);
     localStorage.setItem("kb.name", name);
     if ($("remember").checked) localStorage.setItem("kb.pass", pass);
     else localStorage.removeItem("kb.pass");
@@ -786,7 +794,7 @@ async function pullMsgs() {
     if (msgCache.has(m.id)) continue;
     try {
       const p = await unseal(KEY, m.iv, m.ct);
-      const mine = m.sender === ME;
+      const mine = m.sender === ME || (p.name && p.name === NAME);
       msgCache.set(m.id, { id: m.id, text: p.text, name: p.name,
         at: new Date(m.created_at).getTime(), mine });
       if (!mine) yeni++;
