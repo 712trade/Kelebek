@@ -18,7 +18,7 @@
     --pad: env(safe-area-inset-bottom, 0px);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;overscroll-behavior:none}
+  html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
   body{
     background:var(--ground); color:var(--bone);
     font:400 16px/1.5 ui-rounded,-apple-system,"Segoe UI",system-ui,sans-serif;
@@ -218,7 +218,8 @@
 
   <!-- ============ home ============ -->
   <section id="s-home" class="screen">
-    <header style="display:flex;align-items:center;justify-content:space-between;
+    <header style="display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;
+                   position:sticky;top:0;z-index:3;background:var(--ground);
                    padding-bottom:8px;border-bottom:1px solid rgba(243,227,211,.09)">
       <button id="status" style="display:flex;align-items:center;gap:9px;color:var(--rose);font-size:13.5px">
         <span id="bf-head"></span>
@@ -307,6 +308,7 @@
     </div>
     <button id="s-invite" class="settingrow">Arkadaşına kurulum linki gönder</button>
     <button id="s-lockbtn" class="settingrow">Kilitle ve parolayı unut</button>
+    <button id="s-temizle" class="settingrow">Sohbeti temizle</button>
     <button id="s-wipe" class="settingrow danger">Bekleyen her şeyi sil</button>
     <div style="flex:1"></div>
     <p class="muted" style="font-size:12.5px;line-height:1.6">
@@ -613,7 +615,7 @@ async function bildirimAc() {
 async function bildir(kind) {
   if (!CFG) return;
   try {
-    await fetch(CFG.u.replace(/\/+$/, "") + "/functions/v1/bildir", {
+    await fetch(CFG.u.replace(/\/+$/, "") + "/functions/v1/bildir2", {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: CFG.k },
       body: JSON.stringify({ room: ROOM, device: ME, kind }),
@@ -769,7 +771,7 @@ async function pullMsgs() {
     try {
       const p = await unseal(KEY, m.iv, m.ct);
       const mine = m.sender === ME;
-      msgCache.set(m.id, { text: p.text, name: p.name,
+      msgCache.set(m.id, { id: m.id, text: p.text, name: p.name,
         at: new Date(m.created_at).getTime(), mine });
       if (!mine) yeni++;
     } catch (e) { /* cozulemeyen mesaji atla */ }
@@ -809,7 +811,8 @@ function render() {
   ic.innerHTML = akis.length
     ? akis.map((o, i) => {
         if (o.tip === "msg") {
-          return `<div class="bubble ${o.mine ? "benim" : "onun"}">${esc(o.text)}
+          return `<div class="bubble ${o.mine ? "benim" : "onun"}"
+            ${o.mine ? `data-sil="${o.id}"` : ""}>${esc(o.text)}
             <span class="saat">${clock(o.t)}</span></div>`;
         }
         if (o.tip === "muhur") {
@@ -830,6 +833,16 @@ function render() {
   ic.querySelectorAll("[data-ac]").forEach((b) => {
     const o = akis[+b.dataset.ac];
     b.onclick = () => openSnap(o.row);
+  });
+
+  ic.querySelectorAll("[data-sil]").forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm("Bu mesaj ikinizden de silinsin mi?")) return;
+      const id = b.dataset.sil;
+      await api(`?id=eq.${id}`, { method: "DELETE" }).catch(() => {});
+      msgCache.delete(id);
+      refresh();
+    };
   });
 
   if (dipteydi) box.scrollTop = box.scrollHeight;
@@ -1084,10 +1097,31 @@ $("s-lockbtn").onclick = () => {
   localStorage.removeItem("kb.pass");
   location.reload();
 };
+$("s-temizle").onclick = async () => {
+  if (!confirm("Bütün mesajlar ve izler ikinizden de silinecek. Geri alınamaz.")) return;
+  const btn = $("s-temizle");
+  btn.disabled = true;
+  btn.textContent = "Siliniyor…";
+  try {
+    const msgs = await api(`?room=eq.${ROOM}&k=eq.m&select=id`);
+    for (const m of msgs || []) await api(`?id=eq.${m.id}`, { method: "DELETE" }).catch(() => {});
+    msgCache.clear();
+    localStorage.removeItem("kb.iz");
+    await refresh();
+    btn.textContent = "Sohbet temizlendi ✓";
+  } catch (e) {
+    btn.textContent = "Temizlenemedi, tekrar dene";
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = "Sohbeti temizle"; }, 2500);
+  }
+};
+
 $("s-wipe").onclick = async () => {
   if (!confirm("Bekleyen bütün fotoğraflar ikinizden de silinecek. Geri alınamaz.")) return;
   for (const r of rows) await api(`?id=eq.${r.id}`, { method: "DELETE" }).catch(() => {});
-  localStorage.removeItem("kb.seen");
+  localStorage.removeItem("kb.iz");
+  msgCache.clear();
   PRES = null;
   refresh();
 };
